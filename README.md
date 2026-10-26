@@ -65,3 +65,18 @@ PYTHONPATH=src .venv/Scripts/python -u -m arxiv_rag.eval_generation --answers ev
 ```
 
 `generate` appends one row per (question, config) and runs the configs interleaved per question, so a stopped run is still a paired comparison on the first N questions. A quota stop is clean: rerun the same command later to resume. `--limit N` answers only the first N questions. `eval_generation` judges each non-abstained answer once (verdicts cached in `eval/answer_judgements_v1.jsonl`, same resume behaviour; `--no-judge` uses the cache only) and writes `<out>.json` and `<out>.md`: correct / faithful / abstention rates, retrieval-hit rates, paired differences vs closed-book and BM25 vs dense, correct rate split by whether retrieval hit the evidence, and breakdowns by span type. Only questions answered under every config in `--configs` (default `closed-book dense-k5 bm25-k5`) are scored; quality metrics use the questions judged under every config and the excluded count is reported (an item whose judge call fails is retried once, and after 3 failed runs gets a `judge_error` verdict). Abstentions (reply is exactly `INSUFFICIENT`), prose refusals and citations are re-derived from the answer text, not read from the stored fields. Correctness is judged against the gold evidence quote, so it is evidence-relative.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request: the unit tests, then a retrieval regression gate. No LLM calls, no secrets. The gate re-scores retrieval on `eval/gold_v1.jsonl` (the `structure` chunking, recall@1/@5/@10 and MRR@20, no bootstrap) and compares with `eval/gate_baseline.json`:
+
+```bash
+PYTHONPATH=src .venv/Scripts/python -m arxiv_rag.gate --retrievers bm25            # the CI gate (add dense locally)
+PYTHONPATH=src .venv/Scripts/python -m arxiv_rag.gate --retrievers bm25 dense --update-baseline   # accept new numbers
+```
+
+- Exit 0 = pass, 1 = quality regression (a metric below baseline minus tolerance, or the chunk / question count changed), 2 = no verdict. Exit 2 includes stale gold rows: `parse.py` or `document.py` changed the canonical document text, so revert that change or regenerate the gold set (`eval/README.md`).
+- Tolerance is stored per retriever in the baseline: BM25 is deterministic (0.0, any drop fails); dense gets 0.01 for CPU nondeterminism. A metric above baseline passes but is reported as "baseline is stale": run `--update-baseline` and commit the new `eval/gate_baseline.json` in the same PR.
+- The results table goes to the job summary (`--summary "$GITHUB_STEP_SUMMARY"`).
+- The 100 papers are fetched and parsed once per cache key (corpus list, `ingest.py`, `parse.py`, `requirements.txt`); a cache miss takes ~6-8 min because ingest waits 3 s between arXiv requests.
+- The dense gate is a separate job with `continue-on-error: true`: its first run embeds ~5.7k chunks on CPU (~10-15 min) and the 0.01 tolerance is unproven on GitHub runners. Drop `continue-on-error` once its numbers prove stable.

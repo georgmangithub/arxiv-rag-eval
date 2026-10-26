@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "meta": {
+    "git_commit": "1f50dd32eb6cc79c905b80cce7abfa6bb1b7d8e9",
+    "date": "2026-10-26",
+    "gold": "eval/gold_v1.jsonl",
+    "corpus_sha256": "ae9927297b0f6ec402a21a6f8406906605cef12a507385368c0b5fb031ac75b2"
+  },
+  "chunkings": {
+    "structure": {
+      "max_tokens": 256,
+      "overlap": 32,
+      "chunks": 5685,
+      "gold_questions": 192,
+      "retrievers": {
+        "bm25": {
+          "tolerance": 0.0,
+          "metrics": {
+            "recall@1": 0.8125,
+            "recall@5": 0.947917,
+            "recall@10": 0.953125,
+            "mrr@20": 0.873822
+          }
+        },
+        "dense": {
+          "tolerance": 0.01,
+          "metrics": {
+            "recall@1": 0.484375,
+            "recall@5": 0.71875,
+            "recall@10": 0.817708,
+            "mrr@20": 0.595259
+          }
+        }
+      }
+    }
+  }
+}
