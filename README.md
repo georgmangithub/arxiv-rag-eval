@@ -6,7 +6,7 @@ actually improve answer quality, and by how much?** Every design decision is mea
 Everything is free to build and run: local embeddings, a free-tier LLM API with a local Ollama
 fallback, and open-source tooling. It runs on an 8 GB laptop with no GPU.
 
-> Status: Phases 0-3 done. Phase 2: fixed, recursive and structure-aware chunking are statistically tied; a title/section header hurts. Phase 3: on these entity-named factual questions BM25 beats dense by ~23 points at recall@5, and reranking mainly helps dense. See [docs/results/](docs/results/).
+> Status: Phases 0-4 done (Phase 4 partial: 31 questions, Groq quota). Phase 2: chunking strategies are statistically tied; a title header hurts. Phase 3: BM25 beats dense by ~23 points at recall@5 on these entity-named questions. Phase 4: retrieval lifts correct answers from 13% (closed-book) to 84% (dense) and 97% (BM25). See [docs/results/](docs/results/).
 
 ## Plan
 

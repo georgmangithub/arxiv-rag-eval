@@ -1,0 +1,304 @@
+{
+  "config": {
+    "answers": "eval/answers_v1.jsonl",
+    "judge_out": "eval/answer_judgements_v1.jsonl",
+    "gold": "eval/gold_v1.jsonl",
+    "judge_model": "qwen/qwen3.8-27b",
+    "max_tokens": 256,
+    "overlap": 32,
+    "configs": [
+      "closed-book",
+      "dense-k5",
+      "bm25-k5"
+    ],
+    "bootstrap": 1000,
+    "seed": 0,
+    "hit_coverage": 0.5
+  },
+  "partial": true,
+  "dropped": {
+    "stale": 0,
+    "other_config_rows": 0,
+    "incomplete_questions": 1
+  },
+  "n_gold": 192,
+  "n_questions": 31,
+  "n_papers": 100,
+  "n_gold_papers": 31,
+  "generator_models": [
+    "openai/gpt-oss-120b"
+  ],
+  "gold_status_counts": {
+    "auto_ok": 31
+  },
+  "git_commit": "e753166ab3a391e1194da474462ae638f58023f0",
+  "git_dirty": false,
+  "tokens": {
+    "generation closed-book": {
+      "calls": 31,
+      "mean_prompt_tokens": 130.1290322580645,
+      "mean_completion_tokens": 192.38709677419354
+    },
+    "generation dense-k5": {
+      "calls": 31,
+      "mean_prompt_tokens": 1063.5806451612902,
+      "mean_completion_tokens": 184.32258064516128
+    },
+    "generation bm25-k5": {
+      "calls": 31,
+      "mean_prompt_tokens": 1081.8387096774193,
+      "mean_completion_tokens": 187.25806451612902
+    },
+    "judge": {
+      "calls": 79,
+      "mean_prompt_tokens": 587.9367088607595,
+      "mean_completion_tokens": 18.151898734177216
+    }
+  },
+  "results": {
+    "judged": true,
+    "judge_complete": true,
+    "judge_missing": 0,
+    "judge_errors": 0,
+    "n_scored": 31,
+    "excluded_questions": 0,
+    "gold_spans": {
+      "n": 31,
+      "max_chunk_span": 1403,
+      "longer_than_chunk": 1,
+      "unhittable": 0
+    },
+    "configs": {
+      "closed-book": {
+        "n": 31,
+        "metrics": {
+          "correct": {
+            "mean": 0.12903225806451613,
+            "lo": 0.03225806451612903,
+            "hi": 0.25806451612903225
+          },
+          "correct_or_partial": {
+            "mean": 0.22580645161290322,
+            "lo": 0.0967741935483871,
+            "hi": 0.3870967741935484
+          },
+          "abstained": {
+            "mean": 0.3225806451612903,
+            "lo": 0.16129032258064516,
+            "hi": 0.4838709677419355
+          }
+        },
+        "explicit_abstentions": 10,
+        "prose_refusals": 0,
+        "n_answered": 21,
+        "cites_anything": 0.0,
+        "invalid_citations": 0,
+        "answers_with_invalid_citations": 0
+      },
+      "dense-k5": {
+        "n": 31,
+        "metrics": {
+          "correct": {
+            "mean": 0.8387096774193549,
+            "lo": 0.7096774193548387,
+            "hi": 0.9354838709677419
+          },
+          "correct_or_partial": {
+            "mean": 0.8709677419354839,
+            "lo": 0.7419354838709677,
+            "hi": 0.967741935483871
+          },
+          "faithful": {
+            "mean": 1.0,
+            "lo": 1.0,
+            "hi": 1.0,
+            "n": 28
+          },
+          "faithful_cited": {
+            "mean": 1.0,
+            "lo": 1.0,
+            "hi": 1.0,
+            "n": 28
+          },
+          "abstained": {
+            "mean": 0.0967741935483871,
+            "lo": 0.0,
+            "hi": 0.1935483870967742
+          },
+          "context_hit": {
+            "mean": 0.7419354838709677,
+            "lo": 0.5806451612903226,
+            "hi": 0.9032258064516129
+          },
+          "citation_hit": {
+            "mean": 0.7419354838709677,
+            "lo": 0.5806451612903226,
+            "hi": 0.9032258064516129
+          }
+        },
+        "explicit_abstentions": 3,
+        "prose_refusals": 0,
+        "n_answered": 28,
+        "cites_anything": 1.0,
+        "invalid_citations": 0,
+        "answers_with_invalid_citations": 0
+      },
+      "bm25-k5": {
+        "n": 31,
+        "metrics": {
+          "correct": {
+            "mean": 0.967741935483871,
+            "lo": 0.9032258064516129,
+            "hi": 1.0
+          },
+          "correct_or_partial": {
+            "mean": 0.967741935483871,
+            "lo": 0.9032258064516129,
+            "hi": 1.0
+          },
+          "faithful": {
+            "mean": 1.0,
+            "lo": 1.0,
+            "hi": 1.0,
+            "n": 30
+          },
+          "faithful_cited": {
+            "mean": 1.0,
+            "lo": 1.0,
+            "hi": 1.0,
+            "n": 30
+          },
+          "abstained": {
+            "mean": 0.03225806451612903,
+            "lo": 0.0,
+            "hi": 0.0967741935483871
+          },
+          "context_hit": {
+            "mean": 0.9032258064516129,
+            "lo": 0.7741935483870968,
+            "hi": 1.0
+          },
+          "citation_hit": {
+            "mean": 0.9032258064516129,
+            "lo": 0.7741935483870968,
+            "hi": 1.0
+          }
+        },
+        "explicit_abstentions": 1,
+        "prose_refusals": 0,
+        "n_answered": 30,
+        "cites_anything": 1.0,
+        "invalid_citations": 0,
+        "answers_with_invalid_citations": 0
+      }
+    },
+    "paired_vs_closed_book": {
+      "dense-k5": {
+        "correct": {
+          "diff": 0.7096774193548387,
+          "lo": 0.5483870967741935,
+          "hi": 0.8709677419354839,
+          "frac_le_0": 0.0
+        },
+        "correct_or_partial": {
+          "diff": 0.6451612903225806,
+          "lo": 0.4838709677419355,
+          "hi": 0.8064516129032258,
+          "frac_le_0": 0.0
+        }
+      },
+      "bm25-k5": {
+        "correct": {
+          "diff": 0.8387096774193549,
+          "lo": 0.7096774193548387,
+          "hi": 0.967741935483871,
+          "frac_le_0": 0.0
+        },
+        "correct_or_partial": {
+          "diff": 0.7419354838709677,
+          "lo": 0.5806451612903226,
+          "hi": 0.9032258064516129,
+          "frac_le_0": 0.0
+        }
+      }
+    },
+    "bm25_vs_dense": {
+      "a": "bm25-k5",
+      "b": "dense-k5",
+      "metrics": {
+        "correct": {
+          "diff": 0.12903225806451613,
+          "lo": 0.03225806451612903,
+          "hi": 0.25806451612903225,
+          "frac_le_0": 0.013
+        },
+        "correct_or_partial": {
+          "diff": 0.0967741935483871,
+          "lo": 0.0,
+          "hi": 0.1935483870967742,
+          "frac_le_0": 0.044
+        },
+        "context_hit": {
+          "diff": 0.16129032258064516,
+          "lo": 0.03225806451612903,
+          "hi": 0.2903225806451613,
+          "frac_le_0": 0.007
+        },
+        "citation_hit": {
+          "diff": 0.16129032258064516,
+          "lo": 0.03225806451612903,
+          "hi": 0.2903225806451613,
+          "frac_le_0": 0.007
+        }
+      }
+    },
+    "by_context_hit": {
+      "dense-k5": {
+        "context_hit": {
+          "n": 23,
+          "correct": 1.0,
+          "correct_or_partial": 1.0,
+          "abstained": 0.0
+        },
+        "no context_hit": {
+          "n": 8,
+          "correct": 0.375,
+          "correct_or_partial": 0.5,
+          "abstained": 0.375
+        }
+      },
+      "bm25-k5": {
+        "context_hit": {
+          "n": 28,
+          "correct": 1.0,
+          "correct_or_partial": 1.0,
+          "abstained": 0.0
+        },
+        "no context_hit": {
+          "n": 3,
+          "correct": 0.6666666666666666,
+          "correct_or_partial": 0.6666666666666666,
+          "abstained": 0.3333333333333333
+        }
+      }
+    },
+    "by_span_type": {
+      "paragraph": {
+        "n": 31,
+        "configs": {
+          "closed-book": {
+            "correct": 0.12903225806451613
+          },
+          "dense-k5": {
+            "correct": 0.8387096774193549,
+            "context_hit": 0.7419354838709677
+          },
+          "bm25-k5": {
+            "correct": 0.967741935483871,
+            "context_hit": 0.9032258064516129
+          }
+        }
+      }
+    }
+  }
+}
