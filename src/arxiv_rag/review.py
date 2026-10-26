@@ -18,6 +18,7 @@ import os
 import shutil
 import sys
 import textwrap
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -26,7 +27,11 @@ from arxiv_rag.document import PARAGRAPH_SEP, load_titles
 DEFAULT_DRAFT = Path("eval/gold_draft.jsonl")
 DEFAULT_OUT = Path("eval/gold_v1.jsonl")
 MIN_GOLD = 150
-EXPORT_STATUSES = ("ok", "edit")
+# "auto_ok" = accepted by the machine judge (arxiv_rag.judge) instead of a human.
+EXPORT_STATUSES = ("ok", "edit", "auto_ok")
+REPLACE_RETRIES = 5  # os.replace attempts on PermissionError (Windows)
+REPLACE_SLEEP = 0.05  # seconds, multiplied by the attempt number
+KNOWN_STATUSES = ["draft", "ok", "edit", "bad", "auto_ok", "auto_bad"]
 
 RUBRIC = (
     "Rubric:",
@@ -64,12 +69,13 @@ class DraftFile:
             return None
         return row if isinstance(row, dict) else None
 
-    def set(self, i: int, row: dict) -> None:
+    def set(self, i: int, row: dict, save: bool = True) -> None:
         old = self.lines[i]
         eol = b"\r\n" if old.endswith(b"\r\n") else b"\n"
         self.rows[i] = row
         self.lines[i] = json.dumps(row, ensure_ascii=False).encode("utf-8") + eol
-        self.save()
+        if save:
+            self.save()
 
     def restore(self, i: int, row: dict, line: bytes) -> None:
         self.rows[i], self.lines[i] = row, line
@@ -86,7 +92,14 @@ def atomic_write(path: Path, data: bytes) -> None:
         f.write(data)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp, path)
+    for attempt in range(REPLACE_RETRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:  # Windows: the target is briefly held open (antivirus, indexer)
+            if attempt == REPLACE_RETRIES - 1:
+                raise
+            time.sleep(REPLACE_SLEEP * (attempt + 1))
 
 
 class Lock:
@@ -270,10 +283,10 @@ def read_rows(path: Path) -> list[dict]:
 
 
 def export(draft: Path, out: Path) -> dict[tuple, dict]:
-    keep: dict[tuple, dict] = {}
+    latest: dict[tuple, dict] = {}
     for r in read_rows(draft):
-        if r.get("status") in EXPORT_STATUSES:
-            keep[(r.get("qid"), r.get("doc_sha256"))] = r  # last wins
+        latest[(r.get("qid"), r.get("doc_sha256"))] = r  # last wins, whatever its status
+    keep = {k: r for k, r in latest.items() if r.get("status") in EXPORT_STATUSES}  # then filter
     rows = list(keep.values())
     out.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(out, b"".join(
@@ -290,8 +303,7 @@ def export(draft: Path, out: Path) -> dict[tuple, dict]:
 def stats(draft: Path) -> None:
     rows = read_rows(draft)
     types = sorted({r.get("span_type", "?") for r in rows})
-    statuses = ["draft", "ok", "edit", "bad"] + sorted(
-        {r.get("status") for r in rows} - {"draft", "ok", "edit", "bad"})
+    statuses = KNOWN_STATUSES + sorted({r.get("status") for r in rows} - set(KNOWN_STATUSES))
     cell = Counter((r.get("status"), r.get("span_type", "?")) for r in rows)
     print(f"{'status':<10}" + "".join(f"{t:>17}" for t in types) + f"{'total':>8}")
     for s in statuses:
@@ -311,7 +323,7 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--all", action="store_true", help="revisit every item, not only drafts")
     parser.add_argument("--flagged", action="store_true", help="only items with an auto_flag")
-    parser.add_argument("--export", action="store_true", help="write ok/edit items to --out")
+    parser.add_argument("--export", action="store_true", help="write ok/edit/auto_ok items to --out")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--stats", action="store_true", help="counts by status x span_type and auto_flag")
     args = parser.parse_args()

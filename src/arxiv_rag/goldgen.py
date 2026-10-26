@@ -453,6 +453,16 @@ class MalformedReply(ValueError):
     pass
 
 
+class QuotaExhausted(RuntimeError):
+    """A 429 whose wait is too long to sit out (e.g. a tokens-per-day limit)."""
+
+
+MAX_RETRY_WAIT = 60.0  # seconds slept per retry at most
+QUOTA_WAIT = 300.0  # a Retry-After longer than this means a daily quota, not a per-minute limit
+DAILY_LIMIT_RE = re.compile(r"(?:tokens|requests) per day|\((?:TPD|RPD)\)", re.I)  # daily-limit phrasing in a 429 body
+PROGRESS_EVERY = 10  # print a progress line every N successful LLM calls
+
+
 def _is_skip(s: str) -> bool:
     return s.strip("\"' .").upper() == "SKIP"
 
@@ -521,16 +531,17 @@ class LLMClient:
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.min_interval = 60.0 / rpm if rpm > 0 else 0.0
         self._last = 0.0
+        self.calls = 0
 
     @classmethod
-    def from_env(cls, rpm: float) -> "LLMClient":
+    def from_env(cls, rpm: float, model: str | None = None) -> "LLMClient":
         key = os.environ.get("LLM_API_KEY", "").strip()
         if not key:
             raise SystemExit("LLM_API_KEY is not set (put it in .env or the environment)")
         return cls(
             key,
             os.environ.get("LLM_BASE_URL") or DEFAULT_BASE_URL,
-            os.environ.get("LLM_MODEL") or DEFAULT_MODEL,
+            model or os.environ.get("LLM_MODEL") or DEFAULT_MODEL,
             rpm,
         )
 
@@ -538,15 +549,19 @@ class LLMClient:
         return text.replace(self.api_key, "***") if self.api_key else text
 
     def __call__(self, span: str, span_type: str = "") -> str:
+        return self.chat(SYSTEM_PROMPT, build_user_prompt(span, span_type))
+
+    def chat(self, system: str, user: str, json_mode: bool = True, temperature: float = 0.3) -> str:
         body = {
             "model": self.model,
-            "temperature": 0.3,
-            "response_format": {"type": "json_object"},
+            "temperature": temperature,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(span, span_type)},
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
             ],
         }
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
         for attempt in range(self.max_retries + 1):
             wait = self._last + self.min_interval - time.monotonic()
             if wait > 0:
@@ -567,6 +582,9 @@ class LLMClient:
                     f"LLM request failed: {failure} (not retried; check LLM_BASE_URL and LLM_API_KEY)"
                 )
             if resp is not None and resp.status_code == 200:
+                self.calls += 1
+                if self.calls % PROGRESS_EVERY == 0:
+                    print(f"  ... {self.calls} LLM calls", flush=True)
                 try:
                     return resp.json()["choices"][0]["message"]["content"]
                 except (ValueError, KeyError, IndexError, TypeError) as exc:
@@ -578,8 +596,15 @@ class LLMClient:
                 detail = "network error" if resp is None else f"{resp.status_code} {self._redact(resp.text)[:200]}"
                 raise RuntimeError(f"LLM request failed: {detail}")
             retry_after = resp.headers.get("Retry-After", "") if resp is not None else ""
-            delay = float(retry_after) if retry_after.replace(".", "", 1).isdigit() else 2.0 ** (attempt + 1)
-            time.sleep(min(delay, 60.0))
+            has_wait = retry_after.replace(".", "", 1).isdigit()
+            delay = float(retry_after) if has_wait else 2.0 ** (attempt + 1)
+            if resp is not None and resp.status_code == 429 and (
+                delay > QUOTA_WAIT
+                or (DAILY_LIMIT_RE.search(resp.text) and not (has_wait and delay <= QUOTA_WAIT))
+            ):
+                # A daily quota: waiting a minute at a time only burns hours. Stop; the run resumes.
+                raise QuotaExhausted(f"LLM quota exhausted (retry after ~{delay / 60:.0f} min); rerun later to resume")
+            time.sleep(min(delay, MAX_RETRY_WAIT))
         raise AssertionError("unreachable")
 
 
@@ -931,4 +956,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except QuotaExhausted as exc:  # progress so far is saved; rerunning resumes
+        raise SystemExit(str(exc)) from None

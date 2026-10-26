@@ -163,6 +163,34 @@ def test_export_filters_dedupes_lf(tmp_path, capsys):
     assert "WARNING" in text and "sentence" in text
 
 
+def test_export_dedupes_before_status_filter(tmp_path):
+    draft = tmp_path / "d.jsonl"
+    a = item(1, status="ok")
+    write(draft, [a, dict(a, status="bad"), item(2, status="bad"), dict(item(2), status="auto_ok")])
+    review.export(draft, tmp_path / "g.jsonl")
+    assert [r["qid"] for r in read(tmp_path / "g.jsonl")] == ["p2:0-10"]  # p1's last row is bad
+
+
+def test_atomic_write_retries_permission_error(tmp_path, monkeypatch):
+    real, calls = review.os.replace, []
+
+    def flaky(src, dst):
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError("locked")
+        real(src, dst)
+    monkeypatch.setattr(review.os, "replace", flaky)
+    monkeypatch.setattr(review.time, "sleep", lambda s: None)
+    review.atomic_write(tmp_path / "f", b"x")
+    assert (tmp_path / "f").read_bytes() == b"x" and len(calls) == 3
+
+    def always(src, dst):
+        raise PermissionError("locked")
+    monkeypatch.setattr(review.os, "replace", always)
+    with pytest.raises(PermissionError):
+        review.atomic_write(tmp_path / "f", b"y")
+
+
 def test_export_no_warning_at_150(tmp_path, capsys):
     draft = tmp_path / "d.jsonl"
     write(draft, [item(n, status="ok") for n in range(150)])

@@ -713,3 +713,54 @@ def test_one_half_only_needs_terms_in_both_halves():
     b = "The second sentence describes only generic things about encoders and their training data."
     item = {"span_type": "cross_paragraph", "evidence_quote": a + PARAGRAPH_SEP + b, "question": "How does DPR-2 work?"}
     assert goldgen.auto_flag(item) == ""
+
+
+@pytest.mark.parametrize("headers, text", [({"Retry-After": "3600"}, "slow down"), ({"Retry-After": "400"}, "slow down"), ({}, "Rate limit reached: tokens per day (TPD)")])
+def test_daily_quota_stops_instead_of_retrying(monkeypatch, headers, text):
+    calls, sleeps = [], []
+    monkeypatch.setattr(goldgen.time, "sleep", sleeps.append)
+
+    def post(*a, **k):
+        calls.append(1)
+        r = _resp(429, text=text)
+        r.headers = headers
+        return r
+    monkeypatch.setattr(goldgen.requests, "post", post)
+    client = goldgen.LLMClient("SECRET123", "https://x/v1", "m", rpm=0)
+    with pytest.raises(goldgen.QuotaExhausted):
+        client("span")
+    assert len(calls) == 1 and not sleeps
+
+
+@pytest.mark.parametrize("headers, text", [
+    ({"Retry-After": "20"}, "Rate limit: requests per day (RPD) used; try again in 20s"),
+    ({"Retry-After": "2"}, "Limit 6000 tokens per day (TPD) reached"),
+    ({}, "Please wait a bit, we are busy this day or per day of the week"),
+])
+def test_daily_phrasing_with_short_wait_or_plain_per_day_is_retried(monkeypatch, headers, text):
+    burst = _resp(429, text=text)
+    burst.headers = headers
+    replies = iter([burst, _resp(200, {"choices": [{"message": {"content": "x"}}]})])
+    monkeypatch.setattr(goldgen.time, "sleep", lambda s: None)
+    monkeypatch.setattr(goldgen.requests, "post", lambda *a, **k: next(replies))
+    assert goldgen.LLMClient("k", "https://x/v1", "m", rpm=0)("span") == "x"
+
+
+def test_short_429_is_still_retried(monkeypatch):
+    burst = _resp(429, text="burst")
+    burst.headers = {"Retry-After": "2"}
+    replies = iter([burst, _resp(200, {"choices": [{"message": {"content": "x"}}]})])
+    monkeypatch.setattr(goldgen.time, "sleep", lambda s: None)
+    monkeypatch.setattr(goldgen.requests, "post", lambda *a, **k: next(replies))
+    assert goldgen.LLMClient("k", "https://x/v1", "m", rpm=0)("span") == "x"
+
+
+def test_per_minute_429_with_long_ish_wait_is_retried(monkeypatch):
+    burst = _resp(429, text="tokens per minute (TPM)")
+    burst.headers = {"Retry-After": "75"}
+    replies = iter([burst, _resp(200, {"choices": [{"message": {"content": "x"}}]})])
+    sleeps = []
+    monkeypatch.setattr(goldgen.time, "sleep", sleeps.append)
+    monkeypatch.setattr(goldgen.requests, "post", lambda *a, **k: next(replies))
+    assert goldgen.LLMClient("k", "https://x/v1", "m", rpm=0)("span") == "x"
+    assert sleeps == [goldgen.MAX_RETRY_WAIT]

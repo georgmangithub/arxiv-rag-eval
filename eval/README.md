@@ -6,7 +6,7 @@ Files for the chunking study.
 |---|---|
 | `corpus_v1.txt` | Frozen list of arXiv ids (one per line, `#` comments allowed). Fetch with `python -m arxiv_rag.ingest --ids-file eval/corpus_v1.txt`. Create from a query run with `--write-ids eval/corpus_v1.txt`. |
 | `gold_draft.jsonl` | LLM-drafted questions, all `"status": "draft"`. Made by `python -m arxiv_rag.goldgen --n 200 --seed 0 --out eval/gold_draft.jsonl`. Appends and resumes; `gold_draft.jsonl.rejected` lists spans the model skipped or whose question hit a banned phrase. |
-| `gold_v1.jsonl` | The reviewed subset: only items with `"status": "ok"`. This is what the evaluation uses. |
+| `gold_v1.jsonl` | The accepted subset: items with status `ok`, `edit` or `auto_ok`. This is what the evaluation uses. If it was built without any human review (only `auto_ok`), it is **machine-verified, not human-reviewed** (see below). |
 
 ## Review procedure
 
@@ -32,7 +32,8 @@ Sort by `overlap` descending to review shortcut-prone questions first (overlap i
 - `char_start`, `char_end`: offsets of the quote in `Document.text`.
 - `doc_sha256`: sha256 (UTF-8) of that `Document.text`. The eval ignores (and counts as stale) any row where `doc.text[char_start:char_end] != evidence_quote` or the sha differs from the current document, i.e. the parser or `document.py` changed since the row was drafted; it keeps the last row per `(qid, doc_sha256)` and errors only if no valid rows remain. Regenerate stale rows instead of editing offsets.
 - `span_type`: `paragraph`, `cross_paragraph` (last sentence of a paragraph + first sentence of the next, same section, joined by the paragraph separator), or `sentence`. All spans start with an uppercase letter or digit and end with terminal punctuation (`.!?`, optionally followed by a closing quote or bracket), which filters out PDF column/page-break fragments.
-- `status`: `draft`, `ok`, `edit`, `bad`.
+- `status`: `draft`, `ok`, `edit`, `bad` (human review), `auto_ok`, `auto_bad` (machine judge).
+- `judge` (optional, set by `arxiv_rag.judge`): `{"model", "answerable", "specific", "copy", "needs_both" (cross_paragraph only), "reason"}`.
 - `overlap`: float in 0..1, see above.
 - `title_overlap`: float in 0..1, fraction of the question's non-stopword lowercase word types that appear in the paper title. The question writer is not shown the title, but analysis should still split results by this (high values favour strategies that embed the title).
 
@@ -53,5 +54,15 @@ Known bias: sentence spans survive these filters least (about 37% of sampled sen
 ## Reviewing (terminal tool)
 
 - `python -m arxiv_rag.review [--draft eval/gold_draft.jsonl] [--all] [--flagged]`: walks `draft` items one at a time (paper title from `data/metadata.jsonl`, `auto_flag` with an explanation, question, evidence with the paragraph boundary marked for `cross_paragraph`). Keys: `o` ok, `b` bad, `e` edit the question (evidence and offsets untouched; the old text goes to `question_original`, status `edit`), `s` skip (stays draft), `n` note (`review_note`), `u` undo, `q` quit. Every decision is saved at once (atomic rewrite; row order, other fields and unparseable lines are kept), so rerunning resumes. `--all` revisits reviewed items too, `--flagged` shows only items with an `auto_flag`. It refuses to start if `<draft>.lock` exists and removes it on exit, so do not run it while `goldgen --recheck/--retry-rejected` is running.
-- `python -m arxiv_rag.review --export [--out eval/gold_v1.jsonl]`: writes the `ok` and `edit` items (one per `(qid, doc_sha256)`, last wins; LF endings), prints counts by status and `span_type`, and warns below 150 items.
+- `python -m arxiv_rag.review --export [--out eval/gold_v1.jsonl]`: writes the `ok`, `edit` and `auto_ok` items (the last row per `(qid, doc_sha256)` wins first, whatever its status, then the status filter is applied; LF endings), prints counts by status and `span_type`, and warns below 150 items.
 - `python -m arxiv_rag.review --stats`: counts by status x `span_type`, and by `auto_flag`.
+
+## Machine judge (replaces human review)
+
+- `python -m arxiv_rag.judge [--draft eval/gold_draft.jsonl] [--model qwen/qwen3.8-27b] [--rpm 10] [--dry-run] [--limit N] [--no-json-mode]`: a second model, from a different family than the one that drafted the questions (`openai/gpt-oss-120b`), reads only the `question` and the `evidence_quote` (never the paper title or other fields) and returns strict JSON: `answerable` (the evidence alone fully answers the question), `specific` (the question names a method, dataset, model or number that would let a searcher pick this paper out of ~100 NLP/retrieval papers), `copy` (the question mostly copies the evidence wording) and, for `cross_paragraph` items, `needs_both` (the answer needs both sentences). `<think>` blocks in the reply are stripped.
+- The verdict is stored in `judge`. `status` becomes `auto_ok` iff `answerable` and `specific` and the item's `auto_flag` is not `no_anchor`, `no_specific_term` or `too_long`; otherwise `auto_bad`. `copy` and `needs_both: false` are recorded but do not reject (`copy` feeds the sensitivity breakdown of `eval_chunking`: results on all items vs only `judge.copy == false`). `question`, `evidence_quote` and offsets are never changed.
+- Only items with status `draft` and no `judge` field are asked, so rerunning resumes; malformed replies are counted and retried next run. Each verdict is saved at once (atomic rewrite; row order, other fields and unparseable lines kept). Like the review tool it refuses to run if `<draft>.lock` exists and removes the lock on exit (also on Ctrl-C or an exhausted quota, which stops cleanly with progress kept). `--dry-run` only counts pending items. At the end it prints judged / `auto_ok` / `auto_bad` (by reason) / malformed, and `auto_ok`/`auto_bad` by `span_type`.
+- `python -m arxiv_rag.judge --restatus [--draft ...]`: no LLM calls. Recomputes `status` from the stored `judge` verdict and the current `auto_flag` for every item that has a `judge` field and status `auto_ok` or `auto_bad` (use after changing the rule or after `goldgen --recheck`). Items with human statuses (`ok`/`edit`/`bad`) and drafts without a verdict are never touched. Same lock and atomic write as the judge run; prints counts by status and `span_type`.
+- Export: `python -m arxiv_rag.review --export` includes `auto_ok` together with `ok` and `edit`; `--stats` lists `auto_ok` and `auto_bad` rows.
+
+**Provenance of `gold_v1`:** it is machine-verified (two model families plus the rule filters of `goldgen`), not human-reviewed. State this wherever results on it are reported. Judge and drafter can share blind spots, so treat absolute numbers with care; comparisons between chunkers on the same set are less affected.
