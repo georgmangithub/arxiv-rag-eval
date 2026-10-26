@@ -6,7 +6,7 @@ actually improve answer quality, and by how much?** Every design decision is mea
 Everything is free to build and run: local embeddings, a free-tier LLM API with a local Ollama
 fallback, and open-source tooling. It runs on an 8 GB laptop with no GPU.
 
-> Status: early development. Phase 0 (skeleton) done.
+> Status: Phases 0-2 done. Phase 2 result: on 192 machine-verified questions, fixed, recursive and structure-aware chunking are statistically tied; adding a title/section header hurts recall@5 by ~9 points. See [docs/results/phase2.md](docs/results/phase2.md).
 
 ## Plan
 
