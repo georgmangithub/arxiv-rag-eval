@@ -6,7 +6,7 @@ actually improve answer quality, and by how much?** Every design decision is mea
 Everything is free to build and run: local embeddings, a free-tier LLM API with a local Ollama
 fallback, and open-source tooling. It runs on an 8 GB laptop with no GPU.
 
-> Status: Phases 0-2 done. Phase 2 result: on 192 machine-verified questions, fixed, recursive and structure-aware chunking are statistically tied; adding a title/section header hurts recall@5 by ~9 points. See [docs/results/phase2.md](docs/results/phase2.md).
+> Status: Phases 0-3 done. Phase 2: fixed, recursive and structure-aware chunking are statistically tied; a title/section header hurts. Phase 3: on these entity-named factual questions BM25 beats dense by ~23 points at recall@5, and reranking mainly helps dense. See [docs/results/](docs/results/).
 
 ## Plan
 
@@ -48,3 +48,11 @@ Writes `<out>.json` and `<out>.md` (recall@k, MRR, paper recall, recall at 512/1
 bootstrap 95% CIs, paired differences vs `fixed`, breakdowns by span type and title overlap). The first run embeds
 all chunks (~25 min on CPU); later runs hit the embedding cache. `--allow-draft` scores unreviewed draft questions
 for a pipeline dry run; the outputs are then marked DRAFT. Stale gold rows (re-parsed documents) are dropped and counted.
+
+Phase 3 compares retrievers (dense, BM25, hybrid RRF/convex, each also with cross-encoder reranking) on one chunking (`structure`, 256 tokens), with the same gold set, hit rule and paper bootstrap:
+
+```bash
+PYTHONPATH=src .venv/Scripts/python -u -m arxiv_rag.eval_retrieval --gold eval/gold_v1.jsonl --out docs/results/phase3
+```
+
+Writes `<out>.json` and `<out>.md` (recall, paper recall, paired differences vs `dense` and of each `+rerank` vs its base, breakdowns by span type, copy and lexical overlap, reranker truncation check). Nothing is tuned on the gold set. Reranking runs at ~12 pairs/s on CPU, so the first run can take up to ~1 h; scores are cached, so reruns are fast. `--no-rerank` skips the reranked configs and `--limit N` scores only the first N questions.

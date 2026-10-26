@@ -70,6 +70,8 @@ class GoldItem:
     status: str
     title_overlap: float
     copy: bool = False  # judge.copy; rows without a judge verdict count as non-copy
+    overlap: float | None = None  # longest common word n-gram with the quote / question words; None = field missing
+    quote: str = ""  # the evidence quote (doc.text[char_start:char_end])
 
 
 @dataclass
@@ -104,10 +106,12 @@ def load_gold(path: Path, docs: dict[str, Document], allow_draft: bool = False) 
                     raise KeyError("missing field")
                 start, end = int(r["char_start"]), int(r["char_end"])
                 judge = r.get("judge")
+                quote, sha = r["evidence_quote"], r["doc_sha256"]
+                ov = r.get("overlap")
                 item = GoldItem(r["qid"], r["paper_id"], r["question"], start, end, r["span_type"],
                                 r["status"], float(r.get("title_overlap", 0.0)),
-                                isinstance(judge, dict) and judge.get("copy") is True)
-                quote, sha = r["evidence_quote"], r["doc_sha256"]
+                                isinstance(judge, dict) and judge.get("copy") is True,
+                                None if ov is None else float(ov), quote)
                 key = (item.qid, sha)
                 hash(key)
             except (ValueError, KeyError, TypeError, AttributeError):
