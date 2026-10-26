@@ -48,3 +48,11 @@ Writes `<out>.json` and `<out>.md` (recall@k, MRR, paper recall, recall at 512/1
 bootstrap 95% CIs, paired differences vs `fixed`, breakdowns by span type and title overlap). The first run embeds
 all chunks (~25 min on CPU); later runs hit the embedding cache. `--allow-draft` scores unreviewed draft questions
 for a pipeline dry run; the outputs are then marked DRAFT. Stale gold rows (re-parsed documents) are dropped and counted.
+
+Phase 3 compares retrievers (dense, BM25, hybrid RRF/convex, each also with cross-encoder reranking) on one chunking (`structure`, 256 tokens), with the same gold set, hit rule and paper bootstrap:
+
+```bash
+PYTHONPATH=src .venv/Scripts/python -u -m arxiv_rag.eval_retrieval --gold eval/gold_v1.jsonl --out docs/results/phase3
+```
+
+Writes `<out>.json` and `<out>.md` (recall, paper recall, paired differences vs `dense` and of each `+rerank` vs its base, breakdowns by span type, copy and lexical overlap, reranker truncation check). Nothing is tuned on the gold set. Reranking runs at ~12 pairs/s on CPU, so the first run can take up to ~1 h; scores are cached, so reruns are fast. `--no-rerank` skips the reranked configs and `--limit N` scores only the first N questions.

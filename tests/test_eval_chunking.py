@@ -276,3 +276,14 @@ def test_is_dirty_checks_both_sides_of_a_rename():
     from arxiv_rag.eval_chunking import is_dirty
     assert is_dirty("R  eval/gold_draft.jsonl -> eval/gold_v1.jsonl\n")
     assert not is_dirty("R  eval/gold_draft.jsonl -> eval/gold_draft_old.jsonl\n")
+
+
+def test_load_gold_keeps_quote_and_marks_missing_overlap(tmp_path):
+    docs = make_docs()
+    d1 = docs["p1"]
+    a = row(d1, "Alpha uses ZetaNet for retrieval.")
+    b = row(d1, "It works well on long text.")
+    del b["overlap"]
+    g = ev.load_gold(write_gold(tmp_path / "g.jsonl", [a, b]), docs)
+    assert [i.overlap for i in g.items] == [0.1, None]
+    assert [i.quote for i in g.items] == ["Alpha uses ZetaNet for retrieval.", "It works well on long text."]

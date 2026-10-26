@@ -30,3 +30,21 @@ class FakeBackend:
 
     def embed_query(self, text):
         return self._vec(text)
+
+
+class FakeRerankBackend:
+    """Scores = number of query words appearing in the text; records calls."""
+
+    max_tokens = 512
+    tag = "fake"
+
+    def __init__(self):
+        self.calls: list[tuple[str, list[str]]] = []
+
+    def count_pair_tokens(self, query, text):
+        return len(query.split()) + len(text.split()) + 3
+
+    def score(self, query, texts):
+        self.calls.append((query, list(texts)))
+        q = set(re.findall(r"\w+", query.lower()))
+        return np.array([len(q & set(re.findall(r"\w+", t.lower()))) for t in texts], dtype=np.float32)
