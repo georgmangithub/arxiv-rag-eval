@@ -6,7 +6,7 @@ actually improve answer quality, and by how much?** Every design decision is mea
 Everything is free to build and run: local embeddings, a free-tier LLM API with a local Ollama
 fallback, and open-source tooling. It runs on an 8 GB laptop with no GPU.
 
-> Status: early development. Phase 0 (skeleton) done.
+> Status: Phases 0-2 done. Phase 2 result: on 192 machine-verified questions, fixed, recursive and structure-aware chunking are statistically tied; adding a title/section header hurts recall@5 by ~9 points. See [docs/results/phase2.md](docs/results/phase2.md).
 
 ## Plan
 
@@ -35,3 +35,16 @@ python -m venv .venv && .venv/Scripts/activate
 pip install -r requirements.txt
 cp .env.example .env
 ```
+
+## Running the eval
+
+Phase 2 compares the chunking strategies by dense-retrieval recall over the pinned corpus:
+
+```bash
+PYTHONPATH=src .venv/Scripts/python -u -m arxiv_rag.eval_chunking --gold eval/gold_v1.jsonl --out docs/results/phase2
+```
+
+Writes `<out>.json` and `<out>.md` (recall@k, MRR, paper recall, recall at 512/1024/2048 context tokens, chunk stats,
+bootstrap 95% CIs, paired differences vs `fixed`, breakdowns by span type and title overlap). The first run embeds
+all chunks (~25 min on CPU); later runs hit the embedding cache. `--allow-draft` scores unreviewed draft questions
+for a pipeline dry run; the outputs are then marked DRAFT. Stale gold rows (re-parsed documents) are dropped and counted.
