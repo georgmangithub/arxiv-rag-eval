@@ -532,6 +532,7 @@ class LLMClient:
         self.min_interval = 60.0 / rpm if rpm > 0 else 0.0
         self._last = 0.0
         self.calls = 0
+        self.last_usage: dict | None = None  # token usage of the last successful chat() call
 
     @classmethod
     def from_env(cls, rpm: float, model: str | None = None) -> "LLMClient":
@@ -552,6 +553,7 @@ class LLMClient:
         return self.chat(SYSTEM_PROMPT, build_user_prompt(span, span_type))
 
     def chat(self, system: str, user: str, json_mode: bool = True, temperature: float = 0.3) -> str:
+        self.last_usage = None
         body = {
             "model": self.model,
             "temperature": temperature,
@@ -586,9 +588,14 @@ class LLMClient:
                 if self.calls % PROGRESS_EVERY == 0:
                     print(f"  ... {self.calls} LLM calls", flush=True)
                 try:
-                    return resp.json()["choices"][0]["message"]["content"]
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
                 except (ValueError, KeyError, IndexError, TypeError) as exc:
                     raise MalformedReply(f"unexpected 200 response shape: {type(exc).__name__}") from exc
+                u = data.get("usage") if isinstance(data, dict) else None
+                self.last_usage = ({"prompt_tokens": u.get("prompt_tokens"), "completion_tokens": u.get("completion_tokens")}
+                                   if isinstance(u, dict) else None)
+                return content
             if resp is not None and resp.status_code in (401, 403):
                 raise RuntimeError(f"LLM request failed: {resp.status_code} (check LLM_API_KEY)")
             retryable = resp is None or resp.status_code == 429 or resp.status_code >= 500

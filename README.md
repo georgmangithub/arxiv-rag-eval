@@ -56,3 +56,12 @@ PYTHONPATH=src .venv/Scripts/python -u -m arxiv_rag.eval_retrieval --gold eval/g
 ```
 
 Writes `<out>.json` and `<out>.md` (recall, paper recall, paired differences vs `dense` and of each `+rerank` vs its base, breakdowns by span type, copy and lexical overlap, reranker truncation check). Nothing is tuned on the gold set. Reranking runs at ~12 pairs/s on CPU, so the first run can take up to ~1 h; scores are cached, so reruns are fast. `--no-rerank` skips the reranked configs and `--limit N` scores only the first N questions.
+
+Phase 4 answers the gold questions with citations (closed-book, dense top-5, BM25 top-5 over the `structure` chunks), then scores correctness and faithfulness. It needs `LLM_API_KEY` in `.env` and is built for the Groq free tier (~1000 requests/day per model, ~8000 tokens/minute):
+
+```bash
+PYTHONPATH=src .venv/Scripts/python -u -m arxiv_rag.generate --out eval/answers_v1.jsonl            # 3 x 192 calls, --rpm 4
+PYTHONPATH=src .venv/Scripts/python -u -m arxiv_rag.eval_generation --answers eval/answers_v1.jsonl --out docs/results/phase4
+```
+
+`generate` appends one row per (question, config) and runs the configs interleaved per question, so a stopped run is still a paired comparison on the first N questions. A quota stop is clean: rerun the same command later to resume. `--limit N` answers only the first N questions. `eval_generation` judges each non-abstained answer once (verdicts cached in `eval/answer_judgements_v1.jsonl`, same resume behaviour; `--no-judge` uses the cache only) and writes `<out>.json` and `<out>.md`: correct / faithful / abstention rates, retrieval-hit rates, paired differences vs closed-book and BM25 vs dense, correct rate split by whether retrieval hit the evidence, and breakdowns by span type. Only questions answered under every config in `--configs` (default `closed-book dense-k5 bm25-k5`) are scored; quality metrics use the questions judged under every config and the excluded count is reported (an item whose judge call fails is retried once, and after 3 failed runs gets a `judge_error` verdict). Abstentions (reply is exactly `INSUFFICIENT`), prose refusals and citations are re-derived from the answer text, not read from the stored fields. Correctness is judged against the gold evidence quote, so it is evidence-relative.
